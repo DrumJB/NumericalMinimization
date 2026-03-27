@@ -6,14 +6,19 @@ class NelderMead:
     Xs is a 2x2 array of the verticies of the simplex in the [[x1, y1], [x2, y2] ..., [xn, yn]]. 
     Zfunc is the function to minimize. """
 
-    def __init__(self, Xs, Zfunc, alpha=1.0, gamma=2.0, rho=0.5, sigma=0.5):
-        self.Xs = Xs
+    def __init__(self, Xs, Zfunc, alpha=1.0, gamma=2.0, rho=0.5, sigma=0.5, bounds=(-1.0, 1.0)):
+        self.bounds = bounds
+        self.Xs = self._clip_to_bounds(np.array(Xs, dtype=float, copy=True))
         self.Zfunc = Zfunc
-        self.Zs = Zfunc(Xs[:, 0], Xs[:, 1])
+        self.Zs = Zfunc(self.Xs[:, 0], self.Xs[:, 1])
         self.alpha = alpha
         self.gamma = gamma
         self.rho = rho
         self.sigma = sigma
+
+    def _clip_to_bounds(self, points):
+        lower, upper = self.bounds
+        return np.clip(points, lower, upper)
 
     def step(self):
         # sort the simplex vertices by their function values
@@ -24,12 +29,12 @@ class NelderMead:
         # find centroid
         centroid = np.mean(self.Xs[:-1], axis=0)
         # reflection 
-        reflected = centroid + self.alpha * (centroid - self.Xs[-1])
+        reflected = self._clip_to_bounds(centroid + self.alpha * (centroid - self.Xs[-1]))
         reflected_Z = self.Zfunc(reflected[0], reflected[1])
 
         # reflection is better than the best point -> try expansion
         if reflected_Z < self.Zs[0]:
-            expanded = centroid + self.gamma * (reflected - centroid)
+            expanded = self._clip_to_bounds(centroid + self.gamma * (reflected - centroid))
             expanded_Z = self.Zfunc(expanded[0], expanded[1])
             if expanded_Z < reflected_Z:
                 self.Xs[-1] = expanded
@@ -45,7 +50,7 @@ class NelderMead:
 
         # reflection is between second-worst and worst -> outside contraction
         elif reflected_Z < self.Zs[-1]:
-            contracted = centroid + self.rho * (reflected - centroid)
+            contracted = self._clip_to_bounds(centroid + self.rho * (reflected - centroid))
             contracted_Z = self.Zfunc(contracted[0], contracted[1])
             if contracted_Z <= reflected_Z:
                 self.Xs[-1] = contracted
@@ -55,7 +60,7 @@ class NelderMead:
 
         # reflection is worse than worst -> inside contraction
         else:
-            contracted = centroid + self.rho * (self.Xs[-1] - centroid)
+            contracted = self._clip_to_bounds(centroid + self.rho * (self.Xs[-1] - centroid))
             contracted_Z = self.Zfunc(contracted[0], contracted[1])
             if contracted_Z < self.Zs[-1]:
                 self.Xs[-1] = contracted
@@ -66,6 +71,7 @@ class NelderMead:
         # shrink
         if shrink:
             self.Xs[1:] = self.Xs[0] + self.sigma * (self.Xs[1:] - self.Xs[0])
+            self.Xs = self._clip_to_bounds(self.Xs)
             self.Zs[1:] = self.Zfunc(self.Xs[1:, 0], self.Xs[1:, 1])
     
     def auto_optimize(self, max_iterations=1000, tolerance=1e-6, return_history=False):
